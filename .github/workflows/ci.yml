@@ -1,5 +1,6 @@
 # Builds and tests every push and pull request. A v* tag (e.g. v0.2.0) also builds the host and agent bundles and
-# publishes them, with their checksums, as that tag's GitHub release.
+# publishes them, with their checksums, as that tag's release. Runs on GitHub Actions and on Gitea Actions (the
+# private mirror, with its own runner): each builds and publishes its own release.
 name: CI
 
 on:
@@ -23,8 +24,9 @@ jobs:
       # Also checks that gradle-wrapper.jar is an official one.
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew build
+      # Gitea doesn't take artifacts from upload-artifact@v4.
       - name: Test results
-        if: failure()
+        if: failure() && github.server_url == 'https://github.com'
         uses: actions/upload-artifact@v4
         with:
           name: test-results
@@ -60,9 +62,26 @@ jobs:
           mkdir release
           cp host/build/dist/*.zip agent/build/dist/*.zip release/
           (cd release && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS)
-      - name: Publish the release
+      - name: Publish the release on GitHub
+        if: github.server_url == 'https://github.com'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --title "Orbit ${GITHUB_REF_NAME#v}" --verify-tag \
             --notes "Built from $GITHUB_REF_NAME. See the README for installing the host and the agents."
+      - name: Publish the release on Gitea
+        if: github.server_url != 'https://github.com'
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          api="$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/releases"
+          release=$(jq -n --arg tag "$GITHUB_REF_NAME" --arg name "Orbit ${GITHUB_REF_NAME#v}" \
+            --arg body "Built from $GITHUB_REF_NAME. See the README for installing the host and the agents." \
+            '{tag_name: $tag, name: $name, body: $body}')
+          id=$(curl -fsS -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+            -d "$release" "$api" | jq -r .id)
+          for file in release/*; do
+            curl -fsS -X POST -H "Authorization: token $TOKEN" -F "attachment=@$file" \
+              "$api/$id/assets?name=$(basename "$file")" > /dev/null
+            echo "uploaded $(basename "$file")"
+          done
