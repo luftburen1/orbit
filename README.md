@@ -1,5 +1,7 @@
 # Orbit
 
+[![CI](https://github.com/luftburen1/orbit/actions/workflows/ci.yml/badge.svg)](https://github.com/luftburen1/orbit/actions/workflows/ci.yml)
+
 **Start and control [Moonlight](https://moonlight-stream.org) streams from your
 [Sunshine](https://github.com/LizardByte/Sunshine) host.**
 

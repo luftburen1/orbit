@@ -1,0 +1,68 @@
+# Builds and tests every push and pull request. A v* tag (e.g. v0.2.0) also builds the host and agent bundles and
+# publishes them, with their checksums, as that tag's GitHub release.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      # Also checks that gradle-wrapper.jar is an official one.
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew build
+      - name: Test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: "*/build/test-results/test/*.xml"
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check the tag matches the version
+        run: |
+          version=$(sed -n 's/^ *version *= *"\(.*\)"/\1/p' build.gradle.kts | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match version $version in build.gradle.kts"
+            exit 1
+          fi
+      # The runner is linux-x64: the host app and that agent bundle get runtimes made here; the other agent bundles
+      # get Temurin's runtime for their platform, downloaded from Adoptium.
+      - name: Build the bundles
+        run: |
+          ./gradlew :host:hostBundle :agent:agentDist :agent:agentBundle
+          ./gradlew :agent:agentBundle -PtargetPlatform=linux-arm64
+          ./gradlew :agent:agentBundle -PtargetPlatform=windows-x64
+          mkdir release
+          cp host/build/dist/*.zip agent/build/dist/*.zip release/
+          (cd release && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS)
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --title "Orbit ${GITHUB_REF_NAME#v}" --verify-tag \
+            --notes "Built from $GITHUB_REF_NAME. See the README for installing the host and the agents."
