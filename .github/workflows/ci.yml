@@ -21,8 +21,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      # Also checks that gradle-wrapper.jar is an official one.
-      - uses: gradle/actions/setup-gradle@v4
+          cache: gradle
+      # What gradle/actions would check, which Gitea's runner can't fetch: gradle-wrapper.jar is Gradle's own.
+      - name: Check the Gradle wrapper
+        run: |
+          version=$(sed -n 's/^distributionUrl=.*gradle-\(.*\)-\(bin\|all\)\.zip$/\1/p' gradle/wrapper/gradle-wrapper.properties)
+          expected=$(curl -fsSL "https://services.gradle.org/distributions/gradle-$version-wrapper.jar.sha256")
+          echo "$expected  gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
       - run: ./gradlew build
       # Gitea doesn't take artifacts from upload-artifact@v4.
       - name: Test results
@@ -44,7 +49,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-      - uses: gradle/actions/setup-gradle@v4
+          cache: gradle
       - name: Check the tag matches the version
         run: |
           version=$(sed -n 's/^ *version *= *"\(.*\)"/\1/p' build.gradle.kts | head -n 1)
