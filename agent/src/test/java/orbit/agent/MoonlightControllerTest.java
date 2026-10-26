@@ -6,14 +6,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import orbit.protocol.StreamSettings;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MoonlightControllerTest {
 
@@ -317,6 +321,23 @@ class MoonlightControllerTest {
         long start = System.nanoTime();
         assertEquals(MoonlightController.PairOutcome.ALREADY_PAIRED, c.pair("h", "1234", () -> { }, new java.util.concurrent.CompletableFuture<>()));
         assertTrue(Duration.ofNanos(System.nanoTime() - start).toSeconds() < 2, "must not wait for the timeout");
+    }
+
+    @Test
+    void closingMoonlightEndsWhatItStarted(@TempDir Path dir) throws Exception {
+        // A wrapper (a script in moonlightCommand, flatpak run) whose child is Moonlight itself.
+        Path child = dir.resolve("child.pid");
+        MoonlightController c = pairing(2, "echo 'livingroom is already paired'; sleep 30 & echo $! > " + child
+                + "; wait");
+        long start = System.nanoTime();
+        assertEquals(MoonlightController.PairOutcome.ALREADY_PAIRED, c.pair("h", "1234", () -> { },
+                new java.util.concurrent.CompletableFuture<>()));
+        assertTrue(Duration.ofNanos(System.nanoTime() - start).toSeconds() < 2, "must not wait for the child");
+        long pid = Long.parseLong(Files.readString(child).strip());
+        Optional<ProcessHandle> left = ProcessHandle.of(pid);
+        if (left.isPresent()) {
+            left.get().onExit().get(5, TimeUnit.SECONDS);
+        }
     }
 
     @Test

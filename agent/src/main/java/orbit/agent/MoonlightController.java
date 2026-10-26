@@ -360,10 +360,7 @@ public class MoonlightController {
             process = stream;
         }
         if (process != null && !process.waitFor(5, TimeUnit.SECONDS)) {
-            process.destroy();
-            if (!process.waitFor(5, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-            }
+            terminate(process.toHandle());
         }
         if (!quit.ok() && process == null) {
             throw new IOException("moonlight quit failed: " + quit.output());
@@ -413,12 +410,21 @@ public class MoonlightController {
         return true;
     }
 
+    /**
+     * Asks {@code process} and its children to quit, and kills those still running after 5 s. The children too: when
+     * Moonlight runs through a wrapper (a script in {@code moonlightCommand}, {@code flatpak run}), ending the wrapper
+     * alone would leave Moonlight itself running.
+     */
     private static void terminate(ProcessHandle process) throws InterruptedException {
-        process.destroy();
-        try {
-            process.onExit().get(5, TimeUnit.SECONDS);
-        } catch (ExecutionException | TimeoutException e) {
-            process.destroyForcibly();
+        List<ProcessHandle> family = Stream.concat(process.descendants(), Stream.of(process)).toList();
+        family.forEach(ProcessHandle::destroy);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        for (ProcessHandle member : family) {
+            try {
+                member.onExit().get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            } catch (ExecutionException | TimeoutException e) {
+                member.destroyForcibly();
+            }
         }
     }
 
@@ -597,6 +603,7 @@ public class MoonlightController {
         Process p = launcher.start(command);
         OutputTail output = OutputTail.drain(p, "moonlight-" + command.get(moonlight.size()));
         if (!p.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+            p.descendants().forEach(ProcessHandle::destroyForcibly);
             p.destroyForcibly();
             return new Outcome(false, "timed out after " + timeout.toSeconds() + "s");
         }
