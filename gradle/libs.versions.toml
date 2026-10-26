@@ -1,0 +1,24 @@
+[versions]
+jackson = "2.19.2"
+javalin = "6.7.0"
+jmdns = "3.6.1"
+flatlaf = "3.6.1"
+slf4j = "2.0.17"
+junit = "5.13.4"
+shadow = "8.3.9"
+dbus = "5.1.1"
+
+[libraries]
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+javalin = { module = "io.javalin:javalin", version.ref = "javalin" }
+jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
+flatlaf = { module = "com.formdev:flatlaf", version.ref = "flatlaf" }
+dbus-core = { module = "com.github.hypfvieh:dbus-java-core", version.ref = "dbus" }
+dbus-unixsocket = { module = "com.github.hypfvieh:dbus-java-transport-native-unixsocket", version.ref = "dbus" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

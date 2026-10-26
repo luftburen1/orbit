@@ -1,0 +1,12 @@
+[Unit]
+Description=Orbit agent (lets the Orbit host start Moonlight streams here)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/env java -jar %h/.local/share/orbit/orbit-agent.jar
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
