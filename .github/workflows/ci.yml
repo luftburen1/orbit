@@ -50,11 +50,16 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: gradle
-      - name: Check the tag matches the version
+      # The release notes are docs/releases/<tag>.md, written before tagging; both sites publish the same text.
+      - name: Check the tag matches the version and has release notes
         run: |
           version=$(sed -n 's/^ *version *= *"\(.*\)"/\1/p' build.gradle.kts | head -n 1)
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::tag $GITHUB_REF_NAME doesn't match version $version in build.gradle.kts"
+            exit 1
+          fi
+          if [ ! -s "docs/releases/$GITHUB_REF_NAME.md" ]; then
+            echo "::error::no release notes in docs/releases/$GITHUB_REF_NAME.md"
             exit 1
           fi
       # The runner is linux-x64: the host app and that agent bundle get runtimes made here; the other agent bundles
@@ -73,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --title "Orbit ${GITHUB_REF_NAME#v}" --verify-tag \
-            --notes "Built from $GITHUB_REF_NAME. See the README for installing the host and the agents."
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md"
       - name: Publish the release on Gitea
         if: github.server_url != 'https://github.com'
         env:
@@ -81,10 +86,14 @@ jobs:
         run: |
           api="$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/releases"
           release=$(jq -n --arg tag "$GITHUB_REF_NAME" --arg name "Orbit ${GITHUB_REF_NAME#v}" \
-            --arg body "Built from $GITHUB_REF_NAME. See the README for installing the host and the agents." \
+            --rawfile body "docs/releases/$GITHUB_REF_NAME.md" \
             '{tag_name: $tag, name: $name, body: $body}')
           id=$(curl -fsS -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
             -d "$release" "$api" | jq -r .id)
+          if [ -z "$id" ] || [ "$id" = null ]; then
+            echo "::error::Gitea didn't create the release"
+            exit 1
+          fi
           for file in release/*; do
             curl -fsS -X POST -H "Authorization: token $TOKEN" -F "attachment=@$file" \
               "$api/$id/assets?name=$(basename "$file")" > /dev/null
