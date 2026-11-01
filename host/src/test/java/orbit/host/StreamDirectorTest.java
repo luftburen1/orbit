@@ -690,9 +690,7 @@ class StreamDirectorTest {
         awaitEvent("enable DP-2");
         assertTrue(display.enabled("DP-2"));
         // The file is rewritten just after the monitor turns on.
-        for (int i = 0; i < 100 && java.nio.file.Files.readString(file).contains("DP-2"); i++) {
-            Thread.sleep(20);
-        }
+        awaitSavedWithout(file, "DP-2");
         assertFalse(java.nio.file.Files.readString(file).contains("DP-2"), "nothing left to turn back on");
     }
 
@@ -723,10 +721,21 @@ class StreamDirectorTest {
         StreamDirector next = powerSaving();
         next.rememberTurnedOffMonitorsIn(file);
         next.setTurnOffWhenIdle(false, Duration.ZERO);
-        for (int i = 0; i < 100 && java.nio.file.Files.readString(file).contains("DP-9"); i++) {
-            Thread.sleep(20);
-        }
+        awaitSavedWithout(file, "DP-9");
         assertFalse(java.nio.file.Files.readString(file).contains("DP-9"), java.nio.file.Files.readString(file));
         assertFalse(events.stream().anyMatch(e -> e.contains("DP-9")), events.toString());
+    }
+
+    /**
+     * Waits until a background save has dropped {@code text} from {@code file} and from its {@code .bak} copy, which
+     * is written last: returning before that lets {@code @TempDir}'s cleanup race the write and fail the test.
+     */
+    private static void awaitSavedWithout(java.nio.file.Path file, String text) throws Exception {
+        java.nio.file.Path backup = file.resolveSibling(file.getFileName() + ".bak");
+        for (int i = 0; i < 100 && (java.nio.file.Files.readString(file).contains(text)
+                || !java.nio.file.Files.exists(backup)
+                || java.nio.file.Files.readString(backup).contains(text)); i++) {
+            Thread.sleep(20);
+        }
     }
 }
