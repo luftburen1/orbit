@@ -134,7 +134,7 @@ bundles all of it (about 60 MB zipped). To fetch a newer one, delete `~/.gradle/
 On the Sunshine machine, unzip the host bundle and run its installer in your desktop session:
 
 ```sh
-unzip orbit-host-0.1.0-linux-x64.zip
+unzip orbit-host-0.1.1-linux-x64.zip
 ./orbit-host/install-host.sh
 ```
 
